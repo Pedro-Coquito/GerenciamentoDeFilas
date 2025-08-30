@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Dashboard do Atendente</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root { --cor-fundo: #f4f7fc; --cor-principal: #ffffff; --cor-texto: #33475b; --cor-sombra: rgba(0, 0, 0, 0.05); --cor-botao-normal: #007bff; --cor-botao-normal-hover: #0069d9; --cor-botao-prioritario: #ffc107; --cor-botao-prioritario-hover: #e0a800; --cor-botao-prioritario-texto: #212529; --cor-botao-finalizar: #28a745; --cor-botao-finalizar-hover: #218838; --cor-botao-login: #17a2b8; --cor-botao-login-hover: #138496; --cor-botao-desabilitado: #6c757d; }
+        body { font-family: 'Roboto', sans-serif; background-color: var(--cor-fundo); margin: 0; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .container { background-color: var(--cor-principal); padding: 40px 50px; border-radius: 15px; box-shadow: 0 10px 30px var(--cor-sombra); text-align: center; width: 350px; }
+        #control-view { display: none; } h1 { color: var(--cor-texto); margin-top: 0; margin-bottom: 30px; font-weight: 500; }
+        input[type="number"] { font-size: 1.1em; padding: 12px; margin-bottom: 20px; width: calc(100% - 26px); border: 1px solid #ccc; border-radius: 5px; }
+        button { font-size: 1.1em; padding: 15px 20px; cursor: pointer; width: 100%; border-radius: 8px; border: none; color: white; font-weight: 500; margin-top: 10px; transition: background-color 0.2s ease, transform 0.2s ease; }
+        button:hover:not(:disabled) { transform: translateY(-2px); } button:disabled { background-color: var(--cor-botao-desabilitado); cursor: not-allowed; }
+        .btn-call { background-color: var(--cor-botao-normal); } .btn-call:hover:not(:disabled) { background-color: var(--cor-botao-normal-hover); }
+        .btn-priority { background-color: var(--cor-botao-prioritario); color: var(--cor-botao-prioritario-texto); } .btn-priority:hover:not(:disabled) { background-color: var(--cor-botao-prioritario-hover); }
+        .btn-finish { background-color: var(--cor-botao-finalizar); } .btn-finish:hover:not(:disabled) { background-color: var(--cor-botao-finalizar-hover); }
+        .btn-login { background-color: var(--cor-botao-login); } .btn-login:hover { background-color: var(--cor-botao-login-hover); }
+    </style>
+</head>
+<body>
+
+<div id="login-view" class="container">
+    <h1>Login do Guichê</h1>
+    <input type="number" id="guiche-number" placeholder="Digite o número do seu guichê" min="1" max="10">
+    <button class="btn-login" onclick="login()">Entrar</button>
+</div>
+
+<div id="control-view" class="container">
+    <h1 id="guiche-title">Guichê</h1>
+    <button class="btn-call" onclick="callNormalPassword()">Chamar Próxima Senha</button>
+    <button class="btn-priority" onclick="callPriorityPassword()">Chamar Senha Prioritária</button>
+    <button id="finish-button" class="btn-finish" onclick="finishServing()" disabled>Finalizar Atendimento</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@5.0.0/bundles/stomp.umd.min.js"></script>
+<script>
+    let guicheId = null;
+    const client = new StompJs.Client({
+        brokerURL: `ws://${window.location.host}/ws`,
+        reconnectDelay: 5000,
+    });
+
+    function login() {
+        const input = document.getElementById('guiche-number');
+        const id = parseInt(input.value);
+        if (id >= 1 && id <= 10) {
+            guicheId = id;
+            document.getElementById('login-view').style.display = 'none';
+            document.getElementById('control-view').style.display = 'block';
+            document.getElementById('guiche-title').innerText = `Guichê ${guicheId} - Conectando...`;
+            client.activate();
+        } else {
+            alert('Por favor, insira um número de guichê válido (1 a 10).');
+        }
+    }
+
+    client.onConnect = () => {
+        console.log('Conectado ao WebSocket!');
+        client.publish({ destination: '/app/guiche/login', body: JSON.stringify({ guicheId: guicheId }) });
+
+        client.subscribe('/topic/guiche-status', (message) => {
+            const guiches = JSON.parse(message.body);
+            const meuGuiche = guiches.find(g => g.numero === guicheId);
+            if (meuGuiche) {
+                const statusText = meuGuiche.status.charAt(0) + meuGuiche.status.slice(1).toLowerCase();
+                document.getElementById('guiche-title').innerText = `Guichê ${guicheId} - ${statusText}`;
+            }
+        });
+    };
+
+    // --- FUNÇÃO CORRIGIDA E UNIFICADA ---
+    // Esta função controla o estado de TODOS os botões.
+    function setButtonsState(isOcupado) {
+        // Seleciona os botões de chamad    a pelas suas classes
+        document.querySelectorAll('.btn-call, .btn-priority').forEach(btn => btn.disabled = isOcupado);
+
+        // Seleciona o botão de finalizar pelo seu ID
+        const finishButton = document.getElementById('finish-button');
+        if (finishButton) {
+            finishButton.disabled = !isOcupado;
+        }
+    }
+
+    function callNormalPassword() {
+        if (client.active) {
+            client.publish({ destination: '/app/call-normal', body: JSON.stringify({ guicheId: guicheId }) });
+            setButtonsState(true); // Guichê fica ocupado
+        }
+    }
+
+    function callPriorityPassword() {
+        if (client.active) {
+            client.publish({ destination: '/app/call-prioritario', body: JSON.stringify({ guicheId: guicheId }) });
+            setButtonsState(true); // Guichê fica ocupado
+        }
+    }
+
+    function finishServing() {
+        if (client.active) {
+            client.publish({ destination: '/app/guiche/finish', body: JSON.stringify({ guicheId: guicheId }) });
+            setButtonsState(false); // Guichê fica livre
+        }
+    }
+</script>
+</body>
+</html>

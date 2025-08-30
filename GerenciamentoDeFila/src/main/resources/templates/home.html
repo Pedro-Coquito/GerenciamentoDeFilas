@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Painel de Atendimento</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --cor-fundo: #f4f7fc;
+            --cor-principal: #ffffff;
+            --cor-texto-titulo: #33475b;
+            --cor-texto-senha: #007bff;
+            --cor-texto-guiche: #5a6e8b;
+            --cor-texto-historico: #5a6e8b;
+            --cor-borda: #dee5ef;
+            --cor-sombra: rgba(0, 0, 0, 0.05);
+            --cor-prioritaria-fundo: #fffbe6;
+        }
+        body {
+            font-family: 'Roboto', sans-serif;
+            background-color: var(--cor-fundo);
+            margin: 0;
+            padding: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            box-sizing: border-box;
+            overflow: hidden;
+        }
+        .container-principal {
+            display: flex;
+            width: 100%;
+            max-width: 1400px;
+            height: 700px;
+            background-color: var(--cor-principal);
+            border-radius: 15px;
+            box-shadow: 0 10px 30px var(--cor-sombra);
+            overflow: hidden;
+        }
+        .painel-senha-atual {
+            flex: 2;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 40px;
+            border-right: 1px solid var(--cor-borda);
+            transition: background-color 0.3s ease;
+        }
+        .painel-senha-atual.prioritaria {
+            background-color: var(--cor-prioritaria-fundo);
+        }
+        .painel-senha-atual h1 {
+            color: var(--cor-texto-titulo);
+            font-weight: 300;
+            font-size: 3em;
+            margin: 0;
+        }
+        .painel-senha-atual #current-password {
+            color: var(--cor-texto-senha);
+            font-size: 10em;
+            font-weight: 700;
+            margin: 10px 0;
+            animation: fadeIn 0.5s ease-in-out;
+        }
+        .painel-senha-atual #current-guiche {
+            color: var(--cor-texto-guiche);
+            font-size: 4em;
+            font-weight: 700;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .painel-historico {
+            flex: 1;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+        }
+        .painel-historico h3 {
+            color: var(--cor-texto-titulo);
+            font-weight: 700;
+            text-align: center;
+            margin-top: 0;
+            margin-bottom: 30px;
+            font-size: 1.8em;
+        }
+        .painel-historico ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            text-align: center;
+        }
+        .painel-historico li {
+            color: var(--cor-texto-historico);
+            font-size: 2.2em;
+            font-weight: 300;
+            margin-bottom: 25px;
+        }
+        #start-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.7); display: flex;
+            justify-content: center; align-items: center; z-index: 1000;
+        }
+        #start-button {
+            font-size: 2em; padding: 20px 40px; cursor: pointer;
+            border-radius: 10px; border: none; background-color: #007bff;
+            color: white; transition: background-color 0.2s;
+        }
+        #start-button:hover { background-color: #0056b3; }
+    </style>
+</head>
+<body>
+
+<div id="start-overlay">
+    <button id="start-button" onclick="iniciarPainel()">Iniciar Painel</button>
+</div>
+
+<div class="container-principal">
+    <div class="painel-senha-atual">
+        <h1>SENHA</h1>
+        <div id="current-password">Aguardando...</div>
+        <div id="current-guiche"></div>
+    </div>
+    <div class="painel-historico">
+        <h3>ÚLTIMAS CHAMADAS</h3>
+        <ul id="last-passwords-list"></ul>
+    </div>
+</div>
+
+<audio id="notification-sound" src="/sounds/notification.mp3" preload="auto"></audio>
+
+<script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@5.0.0/bundles/stomp.umd.min.js"></script>
+<script>
+    function iniciarPainel() {
+        document.getElementById('start-overlay').style.display = 'none';
+        const sound = document.getElementById('notification-sound');
+        if (sound) {
+            sound.muted = true;
+            sound.play().catch(e => {});
+            sound.pause();
+            sound.currentTime = 0;
+            sound.muted = false;
+        }
+        conectarWebSocket();
+    }
+
+    function conectarWebSocket() {
+        const client = new StompJs.Client({
+            brokerURL: `ws://${window.location.host}/ws`
+        });
+
+        client.onConnect = (frame) => {
+            console.log('Conectado ao WebSocket');
+            client.subscribe('/topic/passwords', (message) => {
+                const queueStatus = JSON.parse(message.body);
+                const currentPassword = queueStatus.currentPassword;
+                const lastPasswords = queueStatus.lastPasswords;
+
+                const currentPasswordEl = document.getElementById("current-password");
+                const currentGuicheEl = document.getElementById("current-guiche");
+                const senhaAtualContainer = document.querySelector(".painel-senha-atual");
+
+                if (currentPassword && currentPassword.number) {
+                    currentPasswordEl.textContent = currentPassword.counter + currentPassword.number;
+                    currentGuicheEl.textContent = "GUICHÊ " + currentPassword.guicheNumber;
+
+                    currentPasswordEl.style.animation = 'none';
+                    currentPasswordEl.offsetHeight; // Force repaint
+                    currentPasswordEl.style.animation = '';
+
+                    if (currentPassword.counter === "P") {
+                        senhaAtualContainer.classList.add("prioritaria");
+                    } else {
+                        senhaAtualContainer.classList.remove("prioritaria");
+                    }
+
+                    // Toca o som apenas quando uma senha válida é recebida
+                    const sound = document.getElementById('notification-sound');
+                    if (sound) {
+                        sound.play().catch(error => console.error("Erro ao tocar o som:", error));
+                    }
+                }
+
+                const listElement = document.getElementById("last-passwords-list");
+                listElement.innerHTML = "";
+                if (lastPasswords) {
+                    lastPasswords.forEach(password => {
+                        const listItem = document.createElement("li");
+                        listItem.textContent = `${password.counter}${password.number} → Guichê ${password.guicheNumber}`;
+                        listElement.appendChild(listItem);
+                    });
+                }
+            });
+        };
+
+        client.activate();
+    }
+</script>
+
+</body>
+</html>
