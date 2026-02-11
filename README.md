@@ -9,7 +9,7 @@ Sistema robusto de gerenciamento e organização de filas de atendimento, desenv
 ## 🛠️ Tecnologias e Ferramentas
 
 - **Linguagem:** Java 21 (LTS) 
-- **Framework:** Spring Boot 4.0.2.
+- **Framework:** Spring Boot 3.5.5.
 - **Gerenciador de Dependências:** Maven.
 - **Arquitetura:** REST API (ou MVC dependendo da implementação).
 
